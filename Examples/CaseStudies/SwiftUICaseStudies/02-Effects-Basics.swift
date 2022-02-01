@@ -35,14 +35,12 @@ enum EffectsBasicsAction: Equatable {
   case decrementButtonTapped
   case incrementButtonTapped
   case numberFactButtonTapped
-  case numberFactResponse(Result<String, NumbersApiError>)
+  case numberFactResponse(Result<String, FactClient.Error>)
 }
 
-struct NumbersApiError: Error, Equatable {}
-
 struct EffectsBasicsEnvironment {
+  var fact: FactClient
   var mainQueue: AnySchedulerOf<DispatchQueue>
-  var numberFact: (Int) -> Effect<String, NumbersApiError>
 }
 
 // MARK: - Feature business logic
@@ -69,10 +67,9 @@ let effectsBasicsReducer = Reducer<
     state.numberFact = nil
     // Return an effect that fetches a number fact from the API and returns the
     // value back to the reducer's `numberFactResponse` action.
-    return environment.numberFact(state.count)
+    return environment.fact.fetch(state.count)
       .receive(on: environment.mainQueue)
-      .catchToEffect()
-      .map(EffectsBasicsAction.numberFactResponse)
+      .catchToEffect(EffectsBasicsAction.numberFactResponse)
 
   case let .numberFactResponse(.success(response)):
     state.isNumberFactRequestInFlight = false
@@ -106,15 +103,15 @@ struct EffectsBasicsView: View {
             Spacer()
             Button("−") { viewStore.send(.decrementButtonTapped) }
             Text("\(viewStore.count)")
-              .font(Font.body.monospacedDigit())
+              .font(.body.monospacedDigit())
             Button("+") { viewStore.send(.incrementButtonTapped) }
             Spacer()
           }
-          .buttonStyle(BorderlessButtonStyle())
+          .buttonStyle(.borderless)
 
           Button("Number fact") { viewStore.send(.numberFactButtonTapped) }
           if viewStore.isNumberFactRequestInFlight {
-            ActivityIndicator()
+            ProgressView()
           }
 
           viewStore.numberFact.map(Text.init)
@@ -135,8 +132,9 @@ struct EffectsBasicsView_Previews: PreviewProvider {
           initialState: EffectsBasicsState(),
           reducer: effectsBasicsReducer,
           environment: EffectsBasicsEnvironment(
-            mainQueue: .main,
-            numberFact: liveNumberFact(for:))
+            fact: .live,
+            mainQueue: .main
+          )
         )
       )
     }

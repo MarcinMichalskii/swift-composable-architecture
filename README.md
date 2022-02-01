@@ -16,6 +16,7 @@ The Composable Architecture (TCA, for short) is a library for building applicati
 * [Installation](#installation)
 * [Documentation](#documentation)
 * [Help](#help)
+* [Translations](#translations)
 * [Credits and thanks](#credits-and-thanks)
 * [Other libraries](#other-libraries)
 
@@ -45,7 +46,7 @@ The Composable Architecture was designed over the course of many episodes on [Po
 You can watch all of the episodes [here](https://www.pointfree.co/collections/composable-architecture), as well as a dedicated, multipart tour of the architecture from scratch: [part 1](https://www.pointfree.co/collections/composable-architecture/a-tour-of-the-composable-architecture/ep100-a-tour-of-the-composable-architecture-part-1), [part 2](https://www.pointfree.co/collections/composable-architecture/a-tour-of-the-composable-architecture/ep101-a-tour-of-the-composable-architecture-part-2), [part 3](https://www.pointfree.co/collections/composable-architecture/a-tour-of-the-composable-architecture/ep102-a-tour-of-the-composable-architecture-part-3) and [part 4](https://www.pointfree.co/collections/composable-architecture/a-tour-of-the-composable-architecture/ep103-a-tour-of-the-composable-architecture-part-4).
 
 <a href="https://www.pointfree.co/collections/composable-architecture">
-  <img alt="video poster image" src="https://i.vimeocdn.com/video/850265054.jpg" width="600">
+  <img alt="video poster image" src="https://d3rccdn33rt8ze.cloudfront.net/episodes/0069.jpeg" width="600">
 </a>
 
 ## Examples
@@ -136,8 +137,7 @@ let appReducer = Reducer<AppState, AppAction, AppEnvironment> { state, action, e
   case .numberFactButtonTapped:
     return environment.numberFact(state.count)
       .receive(on: environment.mainQueue)
-      .catchToEffect()
-      .map(AppAction.numberFactResponse)
+      .catchToEffect(AppAction.numberFactResponse)
 
   case let .numberFactResponse(.success(fact)):
     state.numberFactAlert = fact
@@ -322,9 +322,7 @@ The Composable Architecture comes with a number of tools to aid in debugging.
 
     ``` diff
     received action:
-      AppAction.todoCheckboxTapped(
-        index: 0
-      )
+      AppAction.todoCheckboxTapped(id: UUID(5834811A-83B4-4E5E-BCD3-8A38F6BDCA90))
       AppState(
         todos: [
           Todo(
@@ -333,16 +331,7 @@ The Composable Architecture comes with a number of tools to aid in debugging.
             description: "Milk",
             id: 5834811A-83B4-4E5E-BCD3-8A38F6BDCA90
           ),
-          Todo(
-            isComplete: false,
-            description: "Eggs",
-            id: AB3C7921-8262-4412-AA93-9DC5575C1107
-          ),
-          Todo(
-            isComplete: true,
-            description: "Hand Soap",
-            id: 06E94D88-D726-42EF-BA8B-7B4478179D19
-          ),
+          … (2 unchanged)
         ]
       )
     ```
@@ -387,7 +376,7 @@ If you are interested in contributing a wrapper library for a framework that we 
 
     1. If done simply with `DispatchQueue.main.async` you will incur a thread hop even when you are already on the main thread. This can lead to unexpected behavior in UIKit and SwiftUI, where sometimes you are required to do work synchronously, such as in animation blocks.
 
-    2. It is possible to create a scheduler that performs its work immediately when on the main thread and otherwise uses `DispatchQueue.main.async` (_e.g._ see ReactiveSwift's [`UIScheduler`](https://github.com/ReactiveCocoa/ReactiveSwift/blob/f97db218c0236b0c6ef74d32adb3d578792969c0/Sources/Scheduler.swift)). This introduces a lot more complexity, and should probably not be adopted without having a very good reason.
+    2. It is possible to create a scheduler that performs its work immediately when on the main thread and otherwise uses `DispatchQueue.main.async` (_e.g._ see [CombineScheduler](https://github.com/pointfreeco/combine-schedulers)'s [`UIScheduler`](https://github.com/pointfreeco/combine-schedulers/blob/main/Sources/CombineSchedulers/UIScheduler.swift)). This introduces a lot more complexity, and should probably not be adopted without having a very good reason.
 
     This is why we require all actions be sent from the same thread. This requirement is in the same spirit of how `URLSession` and other Apple APIs are designed. Those APIs tend to deliver their outputs on whatever thread is most convenient for them, and then it is your responsibility to dispatch back to the main queue if that's what you need. The Composable Architecture makes you responsible for making sure to send actions on the main thread. If you are using an effect that may deliver its output on a non-main thread, you must explicitly perform `.receive(on:)` in order to force it back on the main thread.
 
@@ -418,11 +407,11 @@ The Composable Architecture depends on the Combine framework, so it requires min
 
 You can add ComposableArchitecture to an Xcode project by adding it as a package dependency.
 
-  1. From the **File** menu, select **Swift Packages › Add Package Dependency…**
+  1. From the **File** menu, select **Add Packages...**
   2. Enter "https://github.com/pointfreeco/swift-composable-architecture" into the package repository URL text field
   3. Depending on how your project is structured:
       - If you have a single application target that needs access to the library, then add **ComposableArchitecture** directly to your application.
-      - If you want to use this library from multiple Xcode targets, or mixing Xcode targets and SPM targets, you must create a shared framework that depends on **ComposableArchitecture** and then depend on that framework in all of your targets. For an example of this, check out the [Tic-Tac-Toe](./Examples/TicTacToe) demo application, which splits lots of features into modules and consumes the static library in this fashion using the **TicTacToeCommon** framework.
+      - If you want to use this library from multiple Xcode targets, or mixing Xcode targets and SPM targets, you must create a shared framework that depends on **ComposableArchitecture** and then depend on that framework in all of your targets. For an example of this, check out the [Tic-Tac-Toe](./Examples/TicTacToe) demo application, which splits lots of features into modules and consumes the static library in this fashion using the **tic-tac-toe** Swift package.
 
 ## Documentation
 
@@ -434,7 +423,14 @@ If you want to discuss the Composable Architecture or have a question about how 
 
 ## Translations
 
-- A Korean translation of this README is available [here](https://gist.github.com/pilgwon/ea05e2207ab68bdd1f49dff97b293b17).
+The following translations of this README have been contributed by members of the community:
+
+* [Arabic](https://gist.github.com/NorhanBoghdadi/1b98d55c02b683ddef7e05c2ebcccd47)
+* [French](https://gist.github.com/nikitamounier/0e93eb832cf389db12f9a69da030a2dc)
+* [Indonesian](https://gist.github.com/wendyliga/792ea9ac5cc887f59de70a9e39cc7343)
+* [Italian](https://gist.github.com/Bellaposa/5114e6d4d55fdb1388e8186886d48958)
+* [Korean](https://gist.github.com/pilgwon/ea05e2207ab68bdd1f49dff97b293b17)
+* [Simplified Chinese](https://gist.github.com/sh3l6orrr/10c8f7c634a892a9c37214f3211242ad)
 
 If you'd like to contribute a translation, please [open a PR](https://github.com/pointfreeco/swift-composable-architecture/edit/main/README.md) with a link to a [Gist](https://gist.github.com)!
 

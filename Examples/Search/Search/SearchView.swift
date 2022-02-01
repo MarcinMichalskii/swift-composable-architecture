@@ -49,8 +49,7 @@ let searchReducer = Reducer<SearchState, SearchAction, SearchEnvironment> {
     return environment.weatherClient
       .weather(location.id)
       .receive(on: environment.mainQueue)
-      .catchToEffect()
-      .map(SearchAction.locationWeatherResponse)
+      .catchToEffect(SearchAction.locationWeatherResponse)
       .cancellable(id: SearchWeatherId(), cancelInFlight: true)
 
   case let .searchQueryChanged(query):
@@ -68,10 +67,8 @@ let searchReducer = Reducer<SearchState, SearchAction, SearchEnvironment> {
 
     return environment.weatherClient
       .searchLocation(query)
-      .receive(on: environment.mainQueue)
-      .catchToEffect()
       .debounce(id: SearchLocationId(), for: 0.3, scheduler: environment.mainQueue)
-      .map(SearchAction.locationsResponse)
+      .catchToEffect(SearchAction.locationsResponse)
 
   case let .locationWeatherResponse(.failure(locationWeather)):
     state.locationWeather = nil
@@ -102,13 +99,14 @@ struct SearchView: View {
             TextField(
               "New York, San Francisco, ...",
               text: viewStore.binding(
-                get: \.searchQuery, send: SearchAction.searchQueryChanged)
+                get: \.searchQuery, send: SearchAction.searchQueryChanged
+              )
             )
-            .textFieldStyle(RoundedBorderTextFieldStyle())
+            .textFieldStyle(.roundedBorder)
             .autocapitalization(.none)
             .disableAutocorrection(true)
           }
-          .padding([.leading, .trailing], 16)
+          .padding(.horizontal, 16)
 
           List {
             ForEach(viewStore.locations, id: \.id) { location in
@@ -118,7 +116,7 @@ struct SearchView: View {
                     Text(location.title)
 
                     if viewStore.locationWeatherRequestInFlight?.id == location.id {
-                      ActivityIndicator()
+                      ProgressView()
                     }
                   }
                 }
@@ -133,12 +131,12 @@ struct SearchView: View {
           Button("Weather API provided by MetaWeather.com") {
             UIApplication.shared.open(URL(string: "http://www.MetaWeather.com")!)
           }
-          .foregroundColor(Color.gray)
+          .foregroundColor(.gray)
           .padding(.all, 16)
         }
         .navigationBarTitle("Search")
       }
-      .navigationViewStyle(StackNavigationViewStyle())
+      .navigationViewStyle(.stack)
     }
   }
 
@@ -157,7 +155,7 @@ struct SearchView: View {
           Text(day)
         }
       }
-      .padding([.leading], 16)
+      .padding(.leading, 16)
     )
   }
 }
@@ -230,8 +228,10 @@ struct SearchView_Previews: PreviewProvider {
                   ),
                 ],
                 id: id
-              ))
-          }),
+              )
+            )
+          }
+        ),
         mainQueue: .main
       )
     )

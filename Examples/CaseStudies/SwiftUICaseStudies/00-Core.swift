@@ -1,12 +1,15 @@
 import Combine
 import ComposableArchitecture
 import UIKit
+import XCTestDynamicOverlay
 
 struct RootState {
-  var alertAndActionSheet = AlertAndSheetState()
+  var alertAndConfirmationDialog = AlertAndConfirmationDialogState()
   var animation = AnimationsState()
   var bindingBasics = BindingBasicsState()
-  var bindingForm = BindingFormState()
+  #if compiler(>=5.4)
+    var bindingForm = BindingFormState()
+  #endif
   var clock = ClockState()
   var counter = CounterState()
   var dieRoll = DieRollState()
@@ -14,6 +17,9 @@ struct RootState {
   var effectsCancellation = EffectsCancellationState()
   var effectsTimers = TimersState()
   var episodes = EpisodesState(episodes: .mocks)
+  #if compiler(>=5.5)
+    var focusDemo = FocusDemoState()
+  #endif
   var lifecycle = LifecycleDemoState()
   var loadThenNavigate = LoadThenNavigateState()
   var loadThenNavigateList = LoadThenNavigateListState()
@@ -26,6 +32,7 @@ struct RootState {
   var nested = NestedState.mock
   var optionalBasics = OptionalBasicsState()
   var presentAndLoad = PresentAndLoadState()
+  var refreshable = RefreshableState()
   var shared = SharedState()
   var timers = TimersState()
   var twoCounters = TwoCountersState()
@@ -33,16 +40,21 @@ struct RootState {
 }
 
 enum RootAction {
-  case alertAndActionSheet(AlertAndSheetAction)
+  case alertAndConfirmationDialog(AlertAndConfirmationDialogAction)
   case animation(AnimationsAction)
   case bindingBasics(BindingBasicsAction)
-  case bindingForm(BindingFormAction)
+  #if compiler(>=5.4)
+    case bindingForm(BindingFormAction)
+  #endif
   case clock(ClockAction)
   case counter(CounterAction)
   case dieRoll(DieRollAction)
   case effectsBasics(EffectsBasicsAction)
   case effectsCancellation(EffectsCancellationAction)
   case episodes(EpisodesAction)
+  #if compiler(>=5.5)
+    case focusDemo(FocusDemoAction)
+  #endif
   case lifecycle(LifecycleDemoAction)
   case loadThenNavigate(LoadThenNavigateAction)
   case loadThenNavigateList(LoadThenNavigateListAction)
@@ -56,6 +68,7 @@ enum RootAction {
   case optionalBasics(OptionalBasicsAction)
   case onAppear
   case presentAndLoad(PresentAndLoadAction)
+  case refreshable(RefreshableAction)
   case shared(SharedStateAction)
   case timers(TimersAction)
   case twoCounters(TwoCountersAction)
@@ -65,10 +78,10 @@ enum RootAction {
 struct RootEnvironment {
   var date: () -> Date
   var downloadClient: DownloadClient
+  var fact: FactClient
   var favorite: (UUID, Bool) -> Effect<Bool, Error>
   var fetchNumber: () -> Effect<Int, Never>
   var mainQueue: AnySchedulerOf<DispatchQueue>
-  var numberFact: (Int) -> Effect<String, NumbersApiError>
   var userDidTakeScreenshot: Effect<Void, Never>
   var uuid: () -> UUID
   var webSocket: WebSocketClient
@@ -76,10 +89,10 @@ struct RootEnvironment {
   static let live = Self(
     date: Date.init,
     downloadClient: .live,
+    fact: .live,
     favorite: favorite(id:isFavorite:),
     fetchNumber: liveFetchNumber,
     mainQueue: .main,
-    numberFact: liveNumberFact(for:),
     userDidTakeScreenshot: liveUserDidTakeScreenshot,
     uuid: UUID.init,
     webSocket: .live
@@ -97,10 +110,10 @@ let rootReducer = Reducer<RootState, RootAction, RootEnvironment>.combine(
       return .none
     }
   },
-  alertAndSheetReducer
+  alertAndConfirmationDialogReducer
     .pullback(
-      state: \.alertAndActionSheet,
-      action: /RootAction.alertAndActionSheet,
+      state: \.alertAndConfirmationDialog,
+      action: /RootAction.alertAndConfirmationDialog,
       environment: { _ in .init() }
     ),
   animationsReducer
@@ -115,12 +128,20 @@ let rootReducer = Reducer<RootState, RootAction, RootEnvironment>.combine(
       action: /RootAction.bindingBasics,
       environment: { _ in .init() }
     ),
-  bindingFormReducer
-    .pullback(
-      state: \.bindingForm,
-      action: /RootAction.bindingForm,
-      environment: { _ in .init() }
-    ),
+  .init { state, action, environment in
+    #if compiler(>=5.4)
+      return
+        bindingFormReducer
+        .pullback(
+          state: \.bindingForm,
+          action: /RootAction.bindingForm,
+          environment: { _ in .init() }
+        )
+        .run(&state, action, environment)
+    #else
+      return .none
+    #endif
+  },
   clockReducer
     .pullback(
       state: \.clock,
@@ -143,13 +164,13 @@ let rootReducer = Reducer<RootState, RootAction, RootEnvironment>.combine(
     .pullback(
       state: \.effectsBasics,
       action: /RootAction.effectsBasics,
-      environment: { .init(mainQueue: $0.mainQueue, numberFact: $0.numberFact) }
+      environment: { .init(fact: $0.fact, mainQueue: $0.mainQueue) }
     ),
   effectsCancellationReducer
     .pullback(
       state: \.effectsCancellation,
       action: /RootAction.effectsCancellation,
-      environment: { .init(mainQueue: $0.mainQueue, numberFact: $0.numberFact) }
+      environment: { .init(fact: $0.fact, mainQueue: $0.mainQueue) }
     ),
   episodesReducer
     .pullback(
@@ -157,6 +178,20 @@ let rootReducer = Reducer<RootState, RootAction, RootEnvironment>.combine(
       action: /RootAction.episodes,
       environment: { .init(favorite: $0.favorite, mainQueue: $0.mainQueue) }
     ),
+  .init { state, action, environment in
+    #if compiler(>=5.5)
+      return
+        focusDemoReducer
+        .pullback(
+          state: \.focusDemo,
+          action: /RootAction.focusDemo,
+          environment: { _ in .init() }
+        )
+        .run(&state, action, environment)
+    #else
+      return .none
+    #endif
+  },
   lifecycleDemoReducer
     .pullback(
       state: \.lifecycle,
@@ -201,7 +236,7 @@ let rootReducer = Reducer<RootState, RootAction, RootEnvironment>.combine(
         .init(
           date: env.date,
           environment: .init(fetchNumber: env.fetchNumber),
-          mainQueue: { env.mainQueue },
+          mainQueue: env.mainQueue,
           uuid: env.uuid
         )
       }
@@ -236,6 +271,14 @@ let rootReducer = Reducer<RootState, RootAction, RootEnvironment>.combine(
       action: /RootAction.presentAndLoad,
       environment: { .init(mainQueue: $0.mainQueue) }
     ),
+  refreshableReducer
+    .pullback(
+      state: \.refreshable,
+      action: /RootAction.refreshable,
+      environment: {
+        .init(fact: $0.fact, mainQueue: $0.mainQueue)
+      }
+    ),
   sharedStateReducer
     .pullback(
       state: \.shared,
@@ -261,39 +304,8 @@ let rootReducer = Reducer<RootState, RootAction, RootEnvironment>.combine(
       environment: { .init(mainQueue: $0.mainQueue, webSocket: $0.webSocket) }
     )
 )
+.debug()
 .signpost()
-
-// This is the "live" trivia dependency that reaches into the outside world to fetch trivia.
-// Typically this live implementation of the dependency would live in its own module so that the
-// main feature doesn't need to compile it.
-func liveNumberFact(for n: Int) -> Effect<String, NumbersApiError> {
-  return URLSession.shared.dataTaskPublisher(for: URL(string: "http://numbersapi.com/\(n)/trivia")!)
-    .map { data, _ in String(decoding: data, as: UTF8.self) }
-    .catch { _ in
-      // Sometimes numbersapi.com can be flakey, so if it ever fails we will just
-      // default to a mock response.
-      Just("\(n) is a good number Brent")
-        .delay(for: 1, scheduler: DispatchQueue.main)
-    }
-    .setFailureType(to: NumbersApiError.self)
-    .eraseToEffect()
-}
-
-// This is the "live" trivia dependency that reaches into the outside world to fetch trivia.
-// Typically this live implementation of the dependency would live in its own module so that the
-// main feature doesn't need to compile it.
-func liveTrivia(for n: Int) -> Effect<String, TriviaApiError> {
-  URLSession.shared.dataTaskPublisher(for: URL(string: "http://numbersapi.com/\(n)/trivia")!)
-    .map { data, _ in String.init(decoding: data, as: UTF8.self) }
-    .catch { _ in
-      // Sometimes numbersapi.com can be flakey, so if it ever fails we will just
-      // default to a mock response.
-      Just("\(n) is a good number Brent")
-        .delay(for: 1, scheduler: DispatchQueue.main)
-    }
-    .setFailureType(to: TriviaApiError.self)
-    .eraseToEffect()
-}
 
 private func liveFetchNumber() -> Effect<Int, Never> {
   Deferred { Just(Int.random(in: 1...1_000)) }

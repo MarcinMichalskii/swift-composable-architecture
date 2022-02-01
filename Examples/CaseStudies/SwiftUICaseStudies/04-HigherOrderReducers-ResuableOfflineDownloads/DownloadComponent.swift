@@ -60,8 +60,7 @@ extension Reducer {
         case .alert(.cancelButtonTapped):
           state.mode = .notDownloaded
           state.alert = nil
-          return environment.downloadClient.cancel(state.id)
-            .fireAndForget()
+          return .cancel(id: state.id)
 
         case .alert(.deleteButtonTapped):
           state.alert = nil
@@ -86,10 +85,10 @@ extension Reducer {
           case .notDownloaded:
             state.mode = .startingToDownload
             return environment.downloadClient
-              .download(state.id, state.url)
+              .download(state.url)
               .throttle(for: 1, scheduler: environment.mainQueue, latest: true)
-              .catchToEffect()
-              .map(DownloadComponentAction.downloadClient)
+              .catchToEffect(DownloadComponentAction.downloadClient)
+              .cancellable(id: state.id)
 
           case .startingToDownload:
             state.alert = cancelAlert
@@ -119,18 +118,18 @@ extension Reducer {
 
 private let deleteAlert = AlertState(
   title: .init("Do you want to delete this map from your offline storage?"),
-  primaryButton: .destructive(.init("Delete"), send: .deleteButtonTapped),
+  primaryButton: .destructive(.init("Delete"), action: .send(.deleteButtonTapped)),
   secondaryButton: nevermindButton
 )
 
 private let cancelAlert = AlertState(
   title: .init("Do you want to cancel downloading this map?"),
-  primaryButton: .destructive(.init("Cancel"), send: .cancelButtonTapped),
+  primaryButton: .destructive(.init("Cancel"), action: .send(.cancelButtonTapped)),
   secondaryButton: nevermindButton
 )
 
 let nevermindButton = AlertState<DownloadComponentAction.AlertAction>.Button
-  .default(.init("Nevermind"), send: .nevermindButtonTapped)
+  .default(.init("Nevermind"), action: .send(.nevermindButtonTapped))
 
 struct DownloadComponent<ID: Equatable>: View {
   let store: Store<DownloadComponentState<ID>, DownloadComponentAction>
@@ -140,7 +139,7 @@ struct DownloadComponent<ID: Equatable>: View {
       Button(action: { viewStore.send(.buttonTapped) }) {
         if viewStore.mode == .downloaded {
           Image(systemName: "checkmark.circle")
-            .accentColor(Color.blue)
+            .accentColor(.blue)
         } else if viewStore.mode.progress > 0 {
           ZStack {
             CircularProgressView(value: viewStore.mode.progress)
@@ -148,18 +147,18 @@ struct DownloadComponent<ID: Equatable>: View {
 
             Rectangle()
               .frame(width: 6, height: 6)
-              .foregroundColor(Color.black)
+              .foregroundColor(.black)
           }
         } else if viewStore.mode == .notDownloaded {
           Image(systemName: "icloud.and.arrow.down")
-            .accentColor(Color.black)
+            .accentColor(.black)
         } else if viewStore.mode == .startingToDownload {
           ZStack {
-            ActivityIndicator()
+            ProgressView()
 
             Rectangle()
               .frame(width: 6, height: 6)
-              .foregroundColor(Color.black)
+              .foregroundColor(.black)
           }
         }
       }

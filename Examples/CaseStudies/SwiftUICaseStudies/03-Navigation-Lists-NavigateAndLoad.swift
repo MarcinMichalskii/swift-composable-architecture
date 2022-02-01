@@ -91,7 +91,7 @@ struct NavigateAndLoadListView: View {
                   action: NavigateAndLoadListAction.counter
                 ),
                 then: CounterView.init(store:),
-                else: { ActivityIndicator() }
+                else: ProgressView.init
               ),
               tag: row.id,
               selection: viewStore.binding(
@@ -128,6 +128,6 @@ struct NavigateAndLoadListView_Previews: PreviewProvider {
         )
       )
     }
-    .navigationViewStyle(StackNavigationViewStyle())
+    .navigationViewStyle(.stack)
   }
 }

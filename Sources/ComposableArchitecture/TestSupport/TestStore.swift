@@ -1,5 +1,6 @@
 #if DEBUG
   import Combine
+  import CustomDump
   import Foundation
   import XCTestDynamicOverlay
 
@@ -38,134 +39,143 @@
   ///
   /// For example, given a simple counter reducer:
   ///
-  ///     struct CounterState {
-  ///       var count = 0
-  ///     }
+  /// ```swift
+  /// struct CounterState {
+  ///   var count = 0
+  /// }
   ///
-  ///     enum CounterAction: Equatable {
-  ///       case decrementButtonTapped
-  ///       case incrementButtonTapped
-  ///     }
+  /// enum CounterAction: Equatable {
+  ///   case decrementButtonTapped
+  ///   case incrementButtonTapped
+  /// }
   ///
-  ///     let counterReducer = Reducer<CounterState, CounterAction, Void> { state, action, _ in
-  ///       switch action {
-  ///       case .decrementButtonTapped:
-  ///         state.count -= 1
-  ///         return .none
+  /// let counterReducer = Reducer<CounterState, CounterAction, Void> { state, action, _ in
+  ///   switch action {
+  ///   case .decrementButtonTapped:
+  ///     state.count -= 1
+  ///     return .none
   ///
-  ///       case .incrementButtonTapped:
-  ///         state.count += 1
-  ///         return .none
-  ///       }
-  ///     }
+  ///   case .incrementButtonTapped:
+  ///     state.count += 1
+  ///     return .none
+  ///   }
+  /// }
+  /// ```
   ///
   /// One can assert against its behavior over time:
   ///
-  ///     class CounterTests: XCTestCase {
-  ///       func testCounter() {
-  ///         let store = TestStore(
-  ///           initialState: .init(count: 0),     // GIVEN counter state of 0
-  ///           reducer: counterReducer,
-  ///           environment: ()
-  ///         )
-  ///         store.send(.incrementButtonTapped) { // WHEN the increment button is tapped
-  ///           $0.count = 1                       // THEN the count should be 1
-  ///         }
-  ///       }
+  /// ```swift
+  /// class CounterTests: XCTestCase {
+  ///   func testCounter() {
+  ///     let store = TestStore(
+  ///       initialState: .init(count: 0),     // GIVEN counter state of 0
+  ///       reducer: counterReducer,
+  ///       environment: ()
+  ///     )
+  ///     store.send(.incrementButtonTapped) { // WHEN the increment button is tapped
+  ///       $0.count = 1                       // THEN the count should be 1
   ///     }
+  ///   }
+  /// }
+  /// ```
   ///
   /// Note that in the trailing closure of `.send(.incrementButtonTapped)` we are given a single
   /// mutable value of the state before the action was sent, and it is our job to mutate the value
   /// to match the state after the action was sent. In this case the `count` field changes to `1`.
   ///
   /// For a more complex example, consider the following bare-bones search feature that uses the
-  /// `.debounce` operator to wait for the user to stop typing before making a network request:
+  /// ``Effect/debounce(id:for:scheduler:options:)`` operator to wait for the user to stop typing
+  /// before making a network request:
   ///
-  ///     struct SearchState: Equatable {
-  ///       var query = ""
-  ///       var results: [String] = []
+  /// ```swift
+  /// struct SearchState: Equatable {
+  ///   var query = ""
+  ///   var results: [String] = []
+  /// }
+  ///
+  /// enum SearchAction: Equatable {
+  ///   case queryChanged(String)
+  ///   case response([String])
+  /// }
+  ///
+  /// struct SearchEnvironment {
+  ///   var mainQueue: AnySchedulerOf<DispatchQueue>
+  ///   var request: (String) -> Effect<[String], Never>
+  /// }
+  ///
+  /// let searchReducer = Reducer<SearchState, SearchAction, SearchEnvironment> {
+  ///   state, action, environment in
+  ///
+  ///     struct SearchId: Hashable {}
+  ///
+  ///     switch action {
+  ///     case let .queryChanged(query):
+  ///       state.query = query
+  ///       return environment.request(self.query)
+  ///         .debounce(id: SearchId(), for: 0.5, scheduler: environment.mainQueue)
+  ///
+  ///     case let .response(results):
+  ///       state.results = results
+  ///       return .none
   ///     }
-  ///
-  ///     enum SearchAction: Equatable {
-  ///       case queryChanged(String)
-  ///       case response([String])
-  ///     }
-  ///
-  ///     struct SearchEnvironment {
-  ///       var mainQueue: AnySchedulerOf<DispatchQueue>
-  ///       var request: (String) -> Effect<[String], Never>
-  ///     }
-  ///
-  ///     let searchReducer = Reducer<SearchState, SearchAction, SearchEnvironment> {
-  ///       state, action, environment in
-  ///
-  ///         struct SearchId: Hashable {}
-  ///
-  ///         switch action {
-  ///         case let .queryChanged(query):
-  ///           state.query = query
-  ///           return environment.request(self.query)
-  ///             .debounce(id: SearchId(), for: 0.5, scheduler: environment.mainQueue)
-  ///
-  ///         case let .response(results):
-  ///           state.results = results
-  ///           return .none
-  ///         }
-  ///     }
+  /// }
+  /// ```
   ///
   /// It can be fully tested by controlling the environment's scheduler and effect:
   ///
-  ///     // Create a test dispatch scheduler to control the timing of effects
-  ///     let scheduler = DispatchQueue.test
+  /// ```swift
+  /// // Create a test dispatch scheduler to control the timing of effects
+  /// let scheduler = DispatchQueue.test
   ///
-  ///     let store = TestStore(
-  ///       initialState: SearchState(),
-  ///       reducer: searchReducer,
-  ///       environment: SearchEnvironment(
-  ///         // Wrap the test scheduler in a type-erased scheduler
-  ///         mainQueue: scheduler.eraseToAnyScheduler(),
-  ///         // Simulate a search response with one item
-  ///         request: { _ in Effect(value: ["Composable Architecture"]) }
-  ///       )
-  ///     )
+  /// let store = TestStore(
+  ///   initialState: SearchState(),
+  ///   reducer: searchReducer,
+  ///   environment: SearchEnvironment(
+  ///     // Wrap the test scheduler in a type-erased scheduler
+  ///     mainQueue: scheduler.eraseToAnyScheduler(),
+  ///     // Simulate a search response with one item
+  ///     request: { _ in Effect(value: ["Composable Architecture"]) }
+  ///   )
+  /// )
   ///
-  ///     // Change the query
-  ///     store.send(.searchFieldChanged("c") {
-  ///       // Assert that state updates accordingly
-  ///       $0.query = "c"
-  ///     }
+  /// // Change the query
+  /// store.send(.searchFieldChanged("c") {
+  ///   // Assert that state updates accordingly
+  ///   $0.query = "c"
+  /// }
   ///
-  ///     // Advance the scheduler by a period shorter than the debounce
-  ///     scheduler.advance(by: 0.25)
+  /// // Advance the scheduler by a period shorter than the debounce
+  /// scheduler.advance(by: 0.25)
   ///
-  ///     // Change the query again
-  ///     store.send(.searchFieldChanged("co") {
-  ///       $0.query = "co"
-  ///     }
+  /// // Change the query again
+  /// store.send(.searchFieldChanged("co") {
+  ///   $0.query = "co"
+  /// }
   ///
-  ///     // Advance the scheduler by a period shorter than the debounce
-  ///     scheduler.advance(by: 0.25)
-  ///     // Advance the scheduler to the debounce
-  ///     scheduler.advance(by: 0.25)
+  /// // Advance the scheduler by a period shorter than the debounce
+  /// scheduler.advance(by: 0.25)
+  /// // Advance the scheduler to the debounce
+  /// scheduler.advance(by: 0.25)
   ///
-  ///     // Assert that the expected response is received
-  ///     store.receive(.response(["Composable Architecture"])) {
-  ///       // Assert that state updates accordingly
-  ///       $0.results = ["Composable Architecture"]
-  ///     }
+  /// // Assert that the expected response is received
+  /// store.receive(.response(["Composable Architecture"])) {
+  ///   // Assert that state updates accordingly
+  ///   $0.results = ["Composable Architecture"]
+  /// }
+  /// ```
   ///
   /// This test is proving that the debounced network requests are correctly canceled when we do not
   /// wait longer than the 0.5 seconds, because if it wasn't and it delivered an action when we did
   /// not expect it would cause a test failure.
   ///
-  public final class TestStore<State, LocalState, Action: Equatable, LocalAction, Environment> {
+  public final class TestStore<State, LocalState, Action, LocalAction, Environment> {
     public var environment: Environment
 
     private let file: StaticString
     private let fromLocalAction: (LocalAction) -> Action
     private var line: UInt
     private var longLivingEffects: Set<LongLivingEffect> = []
-    private var receivedActions: [(action: Action, state: State)] = []
+    var receivedActions: [(action: Action, state: State)] = []
     private let reducer: Reducer<State, Action, Environment>
     private var snapshotState: State
     private var store: Store<State, TestAction>!
@@ -224,14 +234,16 @@
       self.completed()
     }
 
-    private func completed() {
+    func completed() {
       if !self.receivedActions.isEmpty {
+        var actions = ""
+        customDump(self.receivedActions.map(\.action), to: &actions)
         XCTFail(
           """
           The store received \(self.receivedActions.count) unexpected \
           action\(self.receivedActions.count == 1 ? "" : "s") after this one: …
 
-          Unhandled actions: \(debugOutput(self.receivedActions.map { $0.action }))
+          Unhandled actions: \(actions)
           """,
           file: self.file, line: self.line
         )
@@ -275,6 +287,17 @@
         self.id.hash(into: &hasher)
       }
     }
+
+    private struct TestAction {
+      let origin: Origin
+      let file: StaticString
+      let line: UInt
+
+      enum Origin {
+        case send(LocalAction)
+        case receive(Action)
+      }
+    }
   }
 
   extension TestStore where State == LocalState, Action == LocalAction {
@@ -311,24 +334,20 @@
       _ update: @escaping (inout LocalState) throws -> Void = { _ in }
     ) {
       if !self.receivedActions.isEmpty {
+        var actions = ""
+        customDump(self.receivedActions.map(\.action), to: &actions)
         XCTFail(
           """
           Must handle \(self.receivedActions.count) received \
           action\(self.receivedActions.count == 1 ? "" : "s") before sending an action: …
 
-          Unhandled actions: \(debugOutput(self.receivedActions.map { $0.action }))
+          Unhandled actions: \(actions)
           """,
           file: file, line: line
         )
       }
       var expectedState = self.toLocalState(self.snapshotState)
-      ViewStore(
-        self.store.scope(
-          state: self.toLocalState,
-          action: { .init(origin: .send($0), file: file, line: line) }
-        )
-      )
-      .send(action)
+      self.store.send(.init(origin: .send(action), file: file, line: line))
       do {
         try update(&expectedState)
       } catch {
@@ -345,6 +364,38 @@
       }
     }
 
+    private func expectedStateShouldMatch(
+      expected: LocalState,
+      actual: LocalState,
+      file: StaticString,
+      line: UInt
+    ) {
+      if expected != actual {
+        let difference =
+          diff(expected, actual, format: .proportional)
+          .map { "\($0.indent(by: 4))\n\n(Expected: −, Actual: +)" }
+          ?? """
+          Expected:
+          \(String(describing: expected).indent(by: 2))
+
+          Actual:
+          \(String(describing: actual).indent(by: 2))
+          """
+
+        XCTFail(
+          """
+          State change does not match expectation: …
+
+          \(difference)
+          """,
+          file: file,
+          line: line
+        )
+      }
+    }
+  }
+
+  extension TestStore where LocalState: Equatable, Action: Equatable {
     public func receive(
       _ expectedAction: Action,
       file: StaticString = #file,
@@ -362,8 +413,8 @@
       }
       let (receivedAction, state) = self.receivedActions.removeFirst()
       if expectedAction != receivedAction {
-        let diff =
-          debugDiff(expectedAction, receivedAction)
+        let difference =
+          diff(expectedAction, receivedAction, format: .proportional)
           .map { "\($0.indent(by: 4))\n\n(Expected: −, Received: +)" }
           ?? """
           Expected:
@@ -377,7 +428,7 @@
           """
           Received unexpected action: …
 
-          \(diff)
+          \(difference)
           """,
           file: file, line: line
         )
@@ -397,106 +448,6 @@
       snapshotState = state
       if "\(self.file)" == "\(file)" {
         self.line = line
-      }
-    }
-
-    /// Asserts against a script of actions.
-    public func assert(
-      _ steps: Step...,
-      file: StaticString = #file,
-      line: UInt = #line
-    ) {
-      assert(steps, file: file, line: line)
-    }
-
-    /// Asserts against an array of actions.
-    public func assert(
-      _ steps: [Step],
-      file: StaticString = #file,
-      line: UInt = #line
-    ) {
-
-      func assert(step: Step) {
-        switch step.type {
-        case let .send(action, update):
-          self.send(action, file: step.file, line: step.line, update)
-
-        case let .receive(expectedAction, update):
-          self.receive(expectedAction, file: step.file, line: step.line, update)
-
-        case let .environment(work):
-          if !self.receivedActions.isEmpty {
-            XCTFail(
-              """
-              Must handle \(self.receivedActions.count) received \
-              action\(self.receivedActions.count == 1 ? "" : "s") before performing this work: …
-
-              Unhandled actions: \(debugOutput(self.receivedActions.map { $0.action }))
-              """,
-              file: step.file, line: step.line
-            )
-          }
-          do {
-            try work(&self.environment)
-          } catch {
-            XCTFail("Threw error: \(error)", file: step.file, line: step.line)
-          }
-
-        case let .do(work):
-          if !receivedActions.isEmpty {
-            XCTFail(
-              """
-              Must handle \(self.receivedActions.count) received \
-              action\(self.receivedActions.count == 1 ? "" : "s") before performing this work: …
-
-              Unhandled actions: \(debugOutput(self.receivedActions.map { $0.action }))
-              """,
-              file: step.file, line: step.line
-            )
-          }
-          do {
-            try work()
-          } catch {
-            XCTFail("Threw error: \(error)", file: step.file, line: step.line)
-          }
-
-        case let .sequence(subSteps):
-          subSteps.forEach(assert(step:))
-        }
-      }
-
-      steps.forEach(assert(step:))
-
-      self.completed()
-    }
-
-    private func expectedStateShouldMatch(
-      expected: LocalState,
-      actual: LocalState,
-      file: StaticString,
-      line: UInt
-    ) {
-      if expected != actual {
-        let diff =
-          debugDiff(expected, actual)
-          .map { "\($0.indent(by: 4))\n\n(Expected: −, Actual: +)" }
-          ?? """
-          Expected:
-          \(String(describing: expected).indent(by: 2))
-
-          Actual:
-          \(String(describing: actual).indent(by: 2))
-          """
-
-        XCTFail(
-          """
-          State change does not match expectation: …
-
-          \(diff)
-          """,
-          file: file,
-          line: line
-        )
       }
     }
   }
@@ -539,125 +490,6 @@
       state toLocalState: @escaping (LocalState) -> S
     ) -> TestStore<State, S, Action, LocalAction, Environment> {
       self.scope(state: toLocalState, action: { $0 })
-    }
-
-    /// A single step of a `TestStore` assertion.
-    public struct Step {
-      fileprivate let type: StepType
-      fileprivate let file: StaticString
-      fileprivate let line: UInt
-
-      private init(
-        _ type: StepType,
-        file: StaticString = #file,
-        line: UInt = #line
-      ) {
-        self.type = type
-        self.file = file
-        self.line = line
-      }
-
-      /// A step that describes an action sent to a store and asserts against how the store's state
-      /// is expected to change.
-      ///
-      /// - Parameters:
-      ///   - action: An action to send to the test store.
-      ///   - update: A function that describes how the test store's state is expected to change.
-      /// - Returns: A step that describes an action sent to a store and asserts against how the
-      ///   store's state is expected to change.
-      public static func send(
-        _ action: LocalAction,
-        file: StaticString = #file,
-        line: UInt = #line,
-        _ update: @escaping (inout LocalState) throws -> Void = { _ in }
-      ) -> Step {
-        Step(.send(action, update), file: file, line: line)
-      }
-
-      /// A step that describes an action received by an effect and asserts against how the store's
-      /// state is expected to change.
-      ///
-      /// - Parameters:
-      ///   - action: An action the test store should receive by evaluating an effect.
-      ///   - update: A function that describes how the test store's state is expected to change.
-      /// - Returns: A step that describes an action received by an effect and asserts against how
-      ///   the store's state is expected to change.
-      public static func receive(
-        _ action: Action,
-        file: StaticString = #file,
-        line: UInt = #line,
-        _ update: @escaping (inout LocalState) throws -> Void = { _ in }
-      ) -> Step {
-        Step(.receive(action, update), file: file, line: line)
-      }
-
-      /// A step that updates a test store's environment.
-      ///
-      /// - Parameter update: A function that updates the test store's environment for subsequent
-      ///   steps.
-      /// - Returns: A step that updates a test store's environment.
-      public static func environment(
-        file: StaticString = #file,
-        line: UInt = #line,
-        _ update: @escaping (inout Environment) throws -> Void
-      ) -> Step {
-        Step(.environment(update), file: file, line: line)
-      }
-
-      /// A step that captures some work to be done between assertions
-      ///
-      /// - Parameter work: A function that is called between steps.
-      /// - Returns: A step that captures some work to be done between assertions.
-      public static func `do`(
-        file: StaticString = #file,
-        line: UInt = #line,
-        _ work: @escaping () throws -> Void
-      ) -> Step {
-        Step(.do(work), file: file, line: line)
-      }
-
-      /// A step that captures a sub-sequence of steps.
-      ///
-      /// - Parameter steps: An array of `Step`
-      /// - Returns: A step that captures a sub-sequence of steps.
-      public static func sequence(
-        _ steps: [Step],
-        file: StaticString = #file,
-        line: UInt = #line
-      ) -> Step {
-        Step(.sequence(steps), file: file, line: line)
-      }
-
-      /// A step that captures a sub-sequence of steps.
-      ///
-      /// - Parameter steps: A variadic list of `Step`
-      /// - Returns: A step that captures a sub-sequence of steps.
-      public static func sequence(
-        _ steps: Step...,
-        file: StaticString = #file,
-        line: UInt = #line
-      ) -> Step {
-        Step(.sequence(steps), file: file, line: line)
-      }
-
-      fileprivate indirect enum StepType {
-        case send(LocalAction, (inout LocalState) throws -> Void)
-        case receive(Action, (inout LocalState) throws -> Void)
-        case environment((inout Environment) throws -> Void)
-        case `do`(() throws -> Void)
-        case sequence([Step])
-      }
-    }
-
-    private struct TestAction {
-      let origin: Origin
-      let file: StaticString
-      let line: UInt
-
-      enum Origin {
-        case send(LocalAction)
-        case receive(Action)
-      }
     }
   }
 #endif

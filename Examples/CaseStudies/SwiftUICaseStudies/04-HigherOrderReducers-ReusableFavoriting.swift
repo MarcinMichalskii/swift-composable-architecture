@@ -73,8 +73,7 @@ extension Reducer {
           return environment.request(state.id, state.isFavorite)
             .receive(on: environment.mainQueue)
             .mapError { FavoriteError(error: $0 as NSError) }
-            .catchToEffect()
-            .map(FavoriteAction.response)
+            .catchToEffect(FavoriteAction.response)
             .cancellable(id: FavoriteCancelId(id: state.id), cancelInFlight: true)
 
         case let .response(.failure(error)):
@@ -151,13 +150,11 @@ let episodeReducer = Reducer<EpisodeState, EpisodeAction, EpisodeEnvironment>.em
 )
 
 struct EpisodesState: Equatable {
-  var episodes: [EpisodeState] = []
-  var episodeSelection: EpisodeState?
+  var episodes: IdentifiedArrayOf<EpisodeState> = []
 }
 
 enum EpisodesAction: Equatable {
-  case episode(index: Int, action: EpisodeAction)
-  case episodeSelection(EpisodeAction)
+  case episode(id: EpisodeState.ID, action: EpisodeAction)
 }
 
 struct EpisodesEnvironment {
@@ -168,7 +165,7 @@ struct EpisodesEnvironment {
 let episodesReducer: Reducer<EpisodesState, EpisodesAction, EpisodesEnvironment> =
   episodeReducer.forEach(
     state: \EpisodesState.episodes,
-    action: /EpisodesAction.episode(index:action:),
+    action: /EpisodesAction.episode(id:action:),
     environment: { EpisodeEnvironment(favorite: $0.favorite, mainQueue: $0.mainQueue) }
   )
 
@@ -179,10 +176,10 @@ struct EpisodesView: View {
     Form {
       Section(header: Text(template: readMe, .caption)) {
         ForEachStore(
-          self.store.scope(state: \.episodes, action: EpisodesAction.episode(index:action:))
+          self.store.scope(state: \.episodes, action: EpisodesAction.episode(id:action:))
         ) { rowStore in
           EpisodeView(store: rowStore)
-            .buttonStyle(BorderlessButtonStyle())
+            .buttonStyle(.borderless)
         }
       }
     }
@@ -228,8 +225,8 @@ func favorite<ID>(id: ID, isFavorite: Bool) -> Effect<Bool, Error> {
   }
 }
 
-extension Array where Element == EpisodeState {
-  static let mocks = [
+extension IdentifiedArray where ID == EpisodeState.ID, Element == EpisodeState {
+  static let mocks: Self = [
     EpisodeState(id: UUID(), isFavorite: false, title: "Functions"),
     EpisodeState(id: UUID(), isFavorite: false, title: "Side Effects"),
     EpisodeState(id: UUID(), isFavorite: false, title: "Algebraic Data Types"),
